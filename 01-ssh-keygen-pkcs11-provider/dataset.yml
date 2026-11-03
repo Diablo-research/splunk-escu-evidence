@@ -1,0 +1,16 @@
+author: Nazar Diachok
+id: 2ac61733-1263-52e1-b04b-e4b26b2876d6
+date: '2026-11-03'
+description: Native lab capture for the "Windows ssh-keygen loading an unsigned PKCS#11
+  provider DLL" detection proposal (splunk/security_content#4382). See README.md for
+  the lab and test cases.
+environment: 'custom lab (see LAB.md): Windows 11 host'
+directory: 01-ssh-keygen-pkcs11-provider
+mitre_technique:
+- T1129
+- T1218
+datasets:
+- name: windows-events
+  path: data/windows-events.log
+  sourcetype: XmlWinEventLog
+  source: XmlWinEventLog:Microsoft-Windows-Sysmon/Operational

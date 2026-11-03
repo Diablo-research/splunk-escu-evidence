@@ -1,0 +1,62 @@
+name: Windows SSH Keygen Unsigned PKCS11 Provider Load
+id: cac39a68-49eb-494a-8e32-5a6982066505
+version: 1
+creation_date: '2026-11-01'
+modification_date: '2026-11-01'
+author: Nazar Diachok, Github Community
+status: experimental
+type: Anomaly
+description: This analytic detects ssh-keygen.exe loading an unsigned or untrusted DLL from outside the Windows and Program Files directories. The Windows OpenSSH ssh-keygen -D option passes a PKCS#11 provider path directly to LoadLibrary, so the provider's code runs inside the trusted ssh-keygen process without spawning a child shell. The analytic alerts on the Sysmon image load itself rather than on command-line parsing, because relative paths, bare file names, omitted extensions, forward slashes, dot-dot segments and option clusters such as -qD all load the same module while the command line differs from the logged path. The initiating command line is attached from Sysmon process creation events by process GUID for context. A match indicates behavior requiring investigation, not proof of malicious intent.
+data_source:
+    - Sysmon EventID 1 AND Sysmon EventID 7
+search: |-
+    `sysmon` EventCode IN (1,7) process_name="ssh-keygen.exe"
+        | eval process_command_line=if(EventCode=1,process,null())
+        | eventstats values(process_command_line) AS process_command_line by dest process_guid
+        | where EventCode=7 AND NOT match(ImageLoaded,"(?i)^[a-z]:\\\\(windows|program files[^\\\\]*)\\\\") AND (lower(Signed)="false" OR coalesce(SignatureStatus,"")!="Valid")
+        | stats count min(_time) AS firstTime max(_time) AS lastTime values(process_command_line) AS process values(process_id) AS process_id values(process_name) AS process_name values(user) AS user values(Signed) AS Signed values(SignatureStatus) AS SignatureStatus by dest process_guid Image ImageLoaded
+        | `security_content_ctime(firstTime)`
+        | `security_content_ctime(lastTime)`
+        | `windows_ssh_keygen_unsigned_pkcs11_provider_load_filter`
+how_to_implement: 'Ingest Sysmon Event ID 7 with image-load collection enabled for ssh-keygen.exe, and Sysmon Event ID 1 for command-line context. Use the Microsoft Windows and Sysmon add-ons to extract process, process_name, process_guid, dest, Image, ImageLoaded, Signed, SignatureStatus and user. Detection depends only on Event ID 7; if Event ID 1 is missing from the search window the alert still fires with an empty process field. Modules under drive-letter Windows and Program Files directories are excluded; user profiles, Temp, ProgramData, other drives and UNC paths are in scope. Sysmon reports Signed=false for untrusted signatures, so a self-signed provider still matches (verified natively). Modules signed with a trusted certificate are not detected. Test platform: native Windows x64 OpenSSH 9.5.6.2 with Sysmon 15.22. Use the generated filter macro to tune approved providers; the default is search *.'
+known_false_positives: Authorized smart-card, hardware-token and PKCS#11 development workflows can load unsigned providers from user profiles or other non-system locations. Vendor providers installed under Program Files, such as OpenSC and Yubico, are excluded. Review provider provenance and tune the filter macro for approved deployments. Legitimate hardware-token deployments have not yet been baselined; this remains experimental.
+references:
+    - https://man.openbsd.org/ssh-keygen#D
+    - https://github.com/PowerShell/openssh-portable/blob/0172cc6adb99d8b4324b8f0391b5b1fd6f39b2c6/ssh-pkcs11.c
+    - https://seanpesce.blogspot.com/2023/03/leveraging-ssh-keygen-for-arbitrary.html
+    - https://lolbas-project.github.io/lolbas/Binaries/Ssh/
+    - https://learn.microsoft.com/en-us/sysinternals/downloads/sysmon
+    - https://attack.mitre.org/techniques/T1129/
+drilldown_searches:
+    - name: View provider load on "$dest$"
+      search: '%original_detection_search% | search dest = "$dest$" process_guid = "$process_guid$"'
+      earliest_offset: $info_min_time$
+      latest_offset: $info_max_time$
+intermediate_findings:
+    entities:
+        - field: dest
+          type: system
+          score: 20
+          message: Unsigned module $ImageLoaded$ was loaded by $Image$ on $dest$ with command line $process$
+threat_objects:
+    - field: ImageLoaded
+      type: file_path
+    - field: process_name
+      type: process_name
+analytic_story:
+    - Living Off The Land
+asset_type: Endpoint
+mitre_attack_id:
+    - T1129
+    - T1218
+product:
+    - Splunk Enterprise
+    - Splunk Enterprise Security
+    - Splunk Cloud
+category: endpoint
+security_domain: endpoint
+tests:
+    - name: Native Windows PKCS11 provider replay
+      test_type: experimental
+      expected_results: 13
+      description: 'Native Windows OpenSSH 9.5.6.2 with a benign C_GetFunctionList marker provider, Sysmon 15.22. Fifteen process instances (488 anonymized events). Negative cases: ordinary ed25519 key generation and a nonexistent provider (0 results). Positive cases (1 result each): absolute Downloads path, quoted path with spaces, attached -D, Temp provider, relative .\ path, bare file name loaded from the working directory, file name without extension, forward slashes, dot-dot segment, -qD and -vvvD option clusters, and a self-signed provider. Every positive case was confirmed to execute the provider callback. Curated attack_data publication is pending before conversion to automated unit tests.'

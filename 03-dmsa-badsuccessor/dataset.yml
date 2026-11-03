@@ -1,0 +1,16 @@
+author: Nazar Diachok
+id: fd96abd3-9a98-5cc7-bbfd-d67a6645e07e
+date: '2026-11-03'
+description: Native lab capture for the "dMSA (BadSuccessor) abuse via predecessor
+  link without superseded-account link" detection proposal (splunk/security_content#4384).
+  See README.md for the lab and test cases.
+environment: 'custom lab (see LAB.md): Windows Server 2025 domain controller VM'
+directory: 03-dmsa-badsuccessor
+mitre_technique:
+- T1098
+- T1078.002
+datasets:
+- name: windows-events
+  path: data/windows-events.log
+  sourcetype: XmlWinEventLog
+  source: XmlWinEventLog:Security

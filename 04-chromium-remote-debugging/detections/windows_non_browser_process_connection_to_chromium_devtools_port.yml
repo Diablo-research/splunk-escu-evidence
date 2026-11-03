@@ -1,0 +1,44 @@
+name: Windows Non-Browser Process Connection To Chromium DevTools Port
+id: bb626217-0330-4d01-9686-fc28b93f389d
+version: 1
+creation_date: '2026-11-01'
+modification_date: '2026-11-01'
+author: Nazar Diachok, Github Community
+status: experimental
+type: Hunting
+description: This analytic hunts for a process other than a Chromium-based browser opening a loopback connection to a common Chrome DevTools Protocol port (9222-9229). After launching a browser with remote debugging, information stealers connect to the local DevTools port to retrieve cookies and other session data in plaintext, which bypasses App-Bound Encryption. Only connections initiated by the non-browser process are reported, using Sysmon Event ID 3. Stealers may choose other ports or use --remote-debugging-pipe, so pair this hunt with the Windows Chromium Browser Remote Debugging Enabled analytic.
+data_source:
+    - Sysmon EventID 3
+search: |-
+    `sysmon` EventCode=3 Initiated="true" DestinationIp IN ("127.0.0.1", "::1") DestinationPort IN (9222, 9223, 9224, 9225, 9226, 9227, 9228, 9229)
+      NOT process_name IN ("chrome.exe", "msedge.exe", "brave.exe", "opera.exe", "vivaldi.exe")
+      | stats count min(_time) as firstTime max(_time) as lastTime values(DestinationPort) as dest_port values(DestinationIp) as dest_ip values(User) as user
+        BY Computer process_name Image ProcessGuid ProcessId
+      | rename Computer as dest, Image as process_path, ProcessGuid as process_guid, ProcessId as process_id
+      | `security_content_ctime(firstTime)`
+      | `security_content_ctime(lastTime)`
+      | `windows_non_browser_process_connection_to_chromium_devtools_port_filter`
+how_to_implement: To successfully implement this search, you need to be ingesting Sysmon Event ID 3 (network connection) events, including loopback connections, from your endpoints, with the Sysmon Technology Add-on. Many Sysmon configurations exclude loopback traffic; include destination ports 9222-9229 for this hunt. Tested with Edge 156, Chrome 156 and Sysmon 15.22.
+known_false_positives: Browser automation frameworks (Selenium, Puppeteer, Playwright), developer tools, Visual Studio Code and Node.js debuggers, and monitoring scripts legitimately connect to the DevTools port. Review the connecting process, its parent and whether a browser with remote debugging was started around the same time.
+references:
+    - https://www.elastic.co/security-labs/katz-and-mouse-game
+    - https://developer.chrome.com/blog/remote-debugging-port
+    - https://specterops.io/blog/2026/08/13/chrome-devtools-protocol-cookie-theft/
+    - https://attack.mitre.org/techniques/T1539/
+analytic_story:
+    - Phemedrone Stealer
+asset_type: Endpoint
+mitre_attack_id:
+    - T1539
+    - T1185
+product:
+    - Splunk Enterprise
+    - Splunk Enterprise Security
+    - Splunk Cloud
+category: endpoint
+security_domain: endpoint
+tests:
+    - name: Native Edge and Chrome remote debugging replay
+      test_type: experimental
+      expected_results: 1
+      description: 'Native Windows 11, Edge 156 and Chrome 156, Sysmon 15.22. A PowerShell process queried /json/version on 127.0.0.1:9222, 9223 and 9224 (one result, three ports). The browser-side accept events (Initiated=false) must not match. Curated attack_data publication is pending.'

@@ -1,0 +1,72 @@
+name: Windows AD Snapshot Created By ADExplorer
+id: 90e4cebd-3e2f-4647-998a-7e64cf66684b
+version: 1
+creation_date: '2026-11-02'
+modification_date: '2026-11-02'
+author: Nazar Diachok, Github Community
+status: experimental
+type: TTP
+description: This analytic detects Sysinternals ADExplorer writing an Active Directory snapshot file. It correlates Sysmon process creation (Event ID 1) with file creation (Event ID 11) by process GUID and keys on OriginalFileName "AdExp", so it also covers renamed copies of the tool, snapshots taken from the GUI menu (which leave no "snapshot" argument on the command line), and snapshot files with any extension. The ADSI schema cache file that ADExplorer writes on every connection (SchCache\\*.sch) is excluded. Threat actors such as Scattered Spider and LAPSUS$ have used ADExplorer snapshots for offline Active Directory reconnaissance.
+data_source:
+    - Sysmon EventID 1 AND Sysmon EventID 11
+search: |-
+    `sysmon` ((EventCode=1 OriginalFileName="AdExp") OR EventCode=11)
+      | eval snapshot_file=if(EventCode=11 AND NOT match(TargetFilename, "(?i)\\\\SchCache\\\\[^\\\\]+\\.sch$"), TargetFilename, null())
+      | stats min(_time) as firstTime max(_time) as lastTime values(OriginalFileName) as original_file_name values(Image) as process_path values(CommandLine) as process values(ParentImage) as parent_process_path values(User) as user values(snapshot_file) as snapshot_file
+        BY Computer ProcessGuid
+      | where original_file_name="AdExp" AND isnotnull(snapshot_file)
+      | rename Computer as dest, ProcessGuid as process_guid
+      | `security_content_ctime(firstTime)`
+      | `security_content_ctime(lastTime)`
+      | `windows_ad_snapshot_created_by_adexplorer_filter`
+how_to_implement: To successfully implement this search, you need to be ingesting Sysmon Event ID 1 (with OriginalFileName) and Event ID 11 (file creation) from your endpoints with the Sysmon Technology Add-on. File creation events must be collected for the folders where snapshots may be written, or broadly for processes with OriginalFileName AdExp. Both event types must be in the same search window. Tested with ADExplorer 1.5x and Sysmon 15.22 on Windows Server 2025.
+known_false_positives: Administrators may take Active Directory snapshots for auditing or migration. Baseline approved users, hosts and snapshot locations and tune the filter macro.
+references:
+    - https://learn.microsoft.com/en-us/sysinternals/downloads/adexplorer
+    - https://github.com/c3c/ADExplorerSnapshot.py
+    - https://www.nccgroup.com/us/research-blog/lapsus-recent-techniques-tactics-and-procedures/
+    - https://www.packetlabs.net/posts/scattered-spider-is-a-young-ransomware-gang-exploiting-large-corporations/
+    - https://trustedsec.com/blog/adexplorer-on-engagements
+drilldown_searches:
+    - name: View the detection results for - "$user$" and "$dest$"
+      search: '%original_detection_search% | search user = "$user$" dest = "$dest$"'
+      earliest_offset: $info_min_time$
+      latest_offset: $info_max_time$
+    - name: View risk events for the last 7 days for - "$user$" and "$dest$"
+      search: '| from datamodel Risk.All_Risk | search normalized_risk_object IN ("$user$", "$dest$") | stats count min(_time) as firstTime max(_time) as lastTime values(search_name) as "Search Name" values(risk_message) as "Risk Message" values(analyticstories) as "Analytic Stories" values(annotations._all) as "Annotations" values(annotations.mitre_attack.mitre_tactic) as "ATT&CK Tactics" by normalized_risk_object | `security_content_ctime(firstTime)` | `security_content_ctime(lastTime)`'
+      earliest_offset: 7d
+      latest_offset: "0"
+finding:
+    title: Active Directory snapshot $snapshot_file$ was written by ADExplorer ($process_path$) on $dest$
+    entity:
+        field: dest
+        type: system
+        score: 50
+intermediate_findings:
+    entities:
+        - field: user
+          type: user
+          score: 50
+          message: Active Directory snapshot $snapshot_file$ was written by ADExplorer ($process_path$) on $dest$
+threat_objects:
+    - field: process_path
+      type: process
+    - field: snapshot_file
+      type: file_name
+analytic_story:
+    - Active Directory Discovery
+asset_type: Endpoint
+mitre_attack_id:
+    - T1087.002
+    - T1069.002
+product:
+    - Splunk Enterprise
+    - Splunk Enterprise Security
+    - Splunk Cloud
+category: endpoint
+security_domain: endpoint
+tests:
+    - name: Native ADExplorer replay
+      test_type: experimental
+      expected_results: 4
+      description: 'Windows Server 2025 lab DC, ADExplorer64, Sysmon 15.22. Expected results: command-line snapshot to .dat, command-line snapshot to .tmp, renamed copy (svc-helper.exe) snapshot, and GUI menu snapshot. The GUI launch without a snapshot and the ADSI schema cache writes must not match. Curated attack_data publication is pending.'

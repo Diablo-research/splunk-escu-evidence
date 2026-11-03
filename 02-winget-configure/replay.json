@@ -1,0 +1,36 @@
+{
+  "title": "WinGet Configuration (winget configure) abuse",
+  "issue": 4383,
+  "index": "ev_02_winget",
+  "data": "data/windows-events.log",
+  "sourcetype": "XmlWinEventLog",
+  "source": "XmlWinEventLog:Microsoft-Windows-Sysmon/Operational",
+  "host": "WIN-WINGET-LAB",
+  "searches": [
+    {
+      "name": "Windows WinGet Configuration File From Remote URL",
+      "kind": "proposed",
+      "expected": 1,
+      "spl": "| tstats `security_content_summariesonly`\n  count min(_time) as firstTime\n        max(_time) as lastTime\n\nfrom datamodel=Endpoint.Processes where\n\n(Processes.process_name=\"winget.exe\" OR Processes.original_file_name=\"winget.exe\")\nProcesses.process IN (\"*configure*\", \"*configuration*\", \"*dsc*\")\nProcesses.process IN (\"*http://*\", \"*https://*\")\n\nby Processes.action Processes.dest Processes.original_file_name Processes.parent_process Processes.parent_process_exec\n   Processes.parent_process_guid Processes.parent_process_id Processes.parent_process_name Processes.parent_process_path\n   Processes.process Processes.process_exec Processes.process_guid Processes.process_hash Processes.process_id\n   Processes.process_integrity_level Processes.process_name Processes.process_path Processes.user Processes.user_id\n   Processes.vendor_product\n\n| `drop_dm_object_name(Processes)`\n| where match(process, \"(?i)winget(\\.exe)?\\\"?\\s+(configure|configuration|dsc)\\s.*https?://\")\n| eval configuration_action=if(match(process, \"(?i)\\s(configure|configuration|dsc)\\s+(show|view|validate|list|ls|test)\\b\"), \"preview\", \"apply\")\n| `security_content_ctime(firstTime)`\n| `security_content_ctime(lastTime)`\n| `windows_winget_configuration_file_from_remote_url_filter`",
+      "fields": [
+        "dest",
+        "user",
+        "configuration_action",
+        "process"
+      ]
+    },
+    {
+      "name": "Windows WinGet Configuration Remoting Server Execution",
+      "kind": "proposed",
+      "expected": 6,
+      "spl": "| tstats `security_content_summariesonly`\n  count min(_time) as firstTime\n        max(_time) as lastTime\n\nfrom datamodel=Endpoint.Processes where\n\nProcesses.process_name=\"ConfigurationRemotingServer.exe\"\nProcesses.parent_process_name IN (\"winget.exe\", \"WindowsPackageManagerServer.exe\")\n\nby Processes.action Processes.dest Processes.original_file_name Processes.parent_process Processes.parent_process_exec\n   Processes.parent_process_guid Processes.parent_process_id Processes.parent_process_name Processes.parent_process_path\n   Processes.process Processes.process_exec Processes.process_guid Processes.process_hash Processes.process_id\n   Processes.process_integrity_level Processes.process_name Processes.process_path Processes.user Processes.user_id\n   Processes.vendor_product\n\n| `drop_dm_object_name(Processes)`\n| eval configuration_action=if(match(parent_process, \"(?i)\\s(configure|configuration|dsc)\\s+(show|view|validate|list|ls|test)\\b\"), \"preview\", \"apply\")\n| `security_content_ctime(firstTime)`\n| `security_content_ctime(lastTime)`\n| `windows_winget_configuration_remoting_server_execution_filter`",
+      "fields": [
+        "dest",
+        "user",
+        "configuration_action",
+        "parent_process",
+        "process"
+      ]
+    }
+  ]
+}

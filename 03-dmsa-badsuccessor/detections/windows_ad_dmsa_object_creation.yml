@@ -1,0 +1,63 @@
+name: Windows AD dMSA Object Creation
+id: 5894d0bc-f2e5-4929-b2e0-7689535b0a2e
+version: 1
+creation_date: '2026-11-01'
+modification_date: '2026-11-01'
+author: Nazar Diachok, Github Community
+status: experimental
+type: Anomaly
+description: This analytic detects the creation of a delegated Managed Service Account (dMSA), object class msDS-DelegatedManagedServiceAccount, in Active Directory using Windows Security Event 5137. dMSAs were introduced with Windows Server 2025 and are rarely created outside planned service account migrations. Research such as BadSuccessor showed that an account with permission to create objects in an organizational unit can create a dMSA and abuse its migration attributes to escalate privileges. New dMSA creations, especially by accounts that are not service-account administrators, should be reviewed.
+data_source:
+    - Windows Event Log Security 5137
+search: |-
+    `wineventlog_security` EventCode=5137 ObjectClass="msDS-DelegatedManagedServiceAccount"
+      | stats count min(_time) as firstTime max(_time) as lastTime values(ObjectDN) as dmsa_dn values(SubjectDomainName) as user_domain values(Computer) as dest
+        BY SubjectUserName ObjectGUID
+      | rename SubjectUserName as user
+      | `security_content_ctime(firstTime)`
+      | `security_content_ctime(lastTime)`
+      | `windows_ad_dmsa_object_creation_filter`
+how_to_implement: To successfully implement this search, you need to be ingesting Windows Security Event Code 5137 from domain controllers. The Advanced Security Audit policy setting Audit Directory Service Changes within DS Access needs to be enabled, with a SACL auditing Create Child on the organizational units or containers where dMSAs can be created. dMSAs require a Windows Server 2025 domain controller. Tested on Windows Server 2025 Standard (build 26100).
+known_false_positives: Planned migrations of service accounts to dMSAs by administrators will match. Baseline the accounts responsible for service account management and tune the filter macro.
+references:
+    - https://www.akamai.com/blog/security-research/abusing-dmsa-for-privilege-escalation-in-active-directory
+    - https://learn.microsoft.com/en-us/windows-server/security/delegated-managed-service-accounts/delegated-managed-service-accounts-set-up-dmsa
+    - https://msrc.microsoft.com/update-guide/vulnerability/CVE-2025-53779
+drilldown_searches:
+    - name: View the detection results for - "$user$" and "$dest$"
+      search: '%original_detection_search% | search user = "$user$" dest = "$dest$"'
+      earliest_offset: $info_min_time$
+      latest_offset: $info_max_time$
+    - name: View risk events for the last 7 days for - "$user$" and "$dest$"
+      search: '| from datamodel Risk.All_Risk | search normalized_risk_object IN ("$user$", "$dest$") | stats count min(_time) as firstTime max(_time) as lastTime values(search_name) as "Search Name" values(risk_message) as "Risk Message" values(analyticstories) as "Analytic Stories" values(annotations._all) as "Annotations" values(annotations.mitre_attack.mitre_tactic) as "ATT&CK Tactics" by normalized_risk_object | `security_content_ctime(firstTime)` | `security_content_ctime(lastTime)`'
+      earliest_offset: 7d
+      latest_offset: "0"
+intermediate_findings:
+    entities:
+        - field: user
+          type: user
+          score: 20
+          message: A delegated managed service account $dmsa_dn$ was created by $user$ on $dest$
+        - field: dest
+          type: system
+          score: 20
+          message: A delegated managed service account $dmsa_dn$ was created by $user$ on $dest$
+analytic_story:
+    - Active Directory Privilege Escalation
+asset_type: Endpoint
+cve:
+    - CVE-2025-53779
+mitre_attack_id:
+    - T1136.002
+    - T1098
+product:
+    - Splunk Enterprise
+    - Splunk Enterprise Security
+    - Splunk Cloud
+category: endpoint
+security_domain: endpoint
+tests:
+    - name: Native Windows Server 2025 dMSA replay
+      test_type: experimental
+      expected_results: 2
+      description: 'Windows Server 2025 Standard Evaluation (build 26100), single-DC lab domain. Two dMSAs created with New-ADServiceAccount -CreateDelegatedServiceAccount (expected results). A gMSA and two user accounts created in the same run must not match. Curated attack_data publication is pending.'

@@ -1,0 +1,85 @@
+name: Windows Chromium Browser Remote Debugging Enabled
+id: 1b76707a-bc59-4f02-916c-8a96a0ae59a0
+version: 1
+creation_date: '2026-11-01'
+modification_date: '2026-11-01'
+author: Nazar Diachok, Github Community
+status: experimental
+type: Anomaly
+description: This analytic detects a Chromium-based browser (Chrome, Edge, Brave, Opera or Vivaldi) started with remote debugging enabled through --remote-debugging-port or --remote-debugging-pipe. Information stealers use the Chrome DevTools Protocol exposed by these switches to read session cookies in plaintext, bypassing App-Bound Encryption, often with a headless browser or a window positioned off-screen so the user does not notice. Since Chrome 136 the switches only take effect together with a non-default --user-data-dir, so stealers copy or create an alternate profile. Only the browser main process is reported; child processes started with --type= and the self-relaunch performed when the browser is started from an elevated process are excluded. The debug_mode, alt_profile and hidden fields support triage. The existing Headless Browser Usage analytic requires both --headless and --disable-gpu and does not cover these launches.
+data_source:
+    - Sysmon EventID 1
+search: |-
+    | tstats `security_content_summariesonly`
+      count min(_time) as firstTime
+            max(_time) as lastTime
+
+    from datamodel=Endpoint.Processes where
+
+    Processes.process_name IN ("chrome.exe", "msedge.exe", "brave.exe", "opera.exe", "vivaldi.exe")
+    Processes.process IN ("*--remote-debugging-port*", "*--remote-debugging-pipe*")
+    NOT Processes.process="*--type=*"
+
+    by Processes.action Processes.dest Processes.original_file_name Processes.parent_process Processes.parent_process_exec
+       Processes.parent_process_guid Processes.parent_process_id Processes.parent_process_name Processes.parent_process_path
+       Processes.process Processes.process_exec Processes.process_guid Processes.process_hash Processes.process_id
+       Processes.process_integrity_level Processes.process_name Processes.process_path Processes.user Processes.user_id
+       Processes.vendor_product
+
+    | `drop_dm_object_name(Processes)`
+    | where NOT (parent_process_name=process_name AND like(process, "%--do-not-de-elevate%"))
+    | eval debug_mode=case(like(process, "%--remote-debugging-pipe%"), "pipe", match(process, "--remote-debugging-port=0(\s|$)"), "port 0", true(), "fixed port")
+    | eval alt_profile=if(like(process, "%--user-data-dir%"), "yes", "no")
+    | eval hidden=if(match(process, "(?i)--headless|--window-position=-\d{4,}"), "yes", "no")
+    | `security_content_ctime(firstTime)`
+    | `security_content_ctime(lastTime)`
+    | `windows_chromium_browser_remote_debugging_enabled_filter`
+how_to_implement: The detection is based on data that originates from Endpoint Detection and Response (EDR) agents. These agents are designed to provide security-related telemetry from the endpoints where the agent is installed. To implement this search, you must ingest logs that contain the process GUID, process name, and parent process. Additionally, you must ingest complete command-line executions. These logs must be processed using the appropriate Splunk Technology Add-ons that are specific to the EDR product. The logs must also be mapped to the `Processes` node of the `Endpoint` data model. Use the Splunk Common Information Model (CIM) to normalize the field names and speed up the data modeling process. Tested with Edge 156 and Chrome 156 and Sysmon 15.22.
+known_false_positives: Browser automation and testing frameworks (Selenium/ChromeDriver, Puppeteer, Playwright), developer tools such as Visual Studio Code debuggers, and some kiosk or scraping applications launch browsers with remote debugging, commonly with --remote-debugging-port=0 or --remote-debugging-pipe. Review the parent process and debug_mode, and tune the filter macro for approved automation hosts and parents.
+references:
+    - https://developer.chrome.com/blog/remote-debugging-port
+    - https://www.elastic.co/security-labs/katz-and-mouse-game
+    - https://specterops.io/blog/2025/08/27/dough-no-revisiting-cookie-theft/
+    - https://spycloud.com/blog/infostealers-bypass-new-chrome-security-feature
+    - https://attack.mitre.org/techniques/T1539/
+drilldown_searches:
+    - name: View the detection results for - "$user$" and "$dest$"
+      search: '%original_detection_search% | search user = "$user$" dest = "$dest$"'
+      earliest_offset: $info_min_time$
+      latest_offset: $info_max_time$
+    - name: View risk events for the last 7 days for - "$user$" and "$dest$"
+      search: '| from datamodel Risk.All_Risk | search normalized_risk_object IN ("$user$", "$dest$") | stats count min(_time) as firstTime max(_time) as lastTime values(search_name) as "Search Name" values(risk_message) as "Risk Message" values(analyticstories) as "Analytic Stories" values(annotations._all) as "Annotations" values(annotations.mitre_attack.mitre_tactic) as "ATT&CK Tactics" by normalized_risk_object | `security_content_ctime(firstTime)` | `security_content_ctime(lastTime)`'
+      earliest_offset: 7d
+      latest_offset: "0"
+intermediate_findings:
+    entities:
+        - field: dest
+          type: system
+          score: 30
+          message: Browser $process_name$ was started with remote debugging ($debug_mode$, hidden=$hidden$) by $parent_process_name$ on $dest$ for user $user$
+        - field: user
+          type: user
+          score: 30
+          message: Browser $process_name$ was started with remote debugging ($debug_mode$, hidden=$hidden$) by $parent_process_name$ on $dest$ for user $user$
+threat_objects:
+    - field: parent_process_name
+      type: parent_process_name
+    - field: process_name
+      type: process_name
+analytic_story:
+    - Phemedrone Stealer
+asset_type: Endpoint
+mitre_attack_id:
+    - T1539
+    - T1185
+product:
+    - Splunk Enterprise
+    - Splunk Enterprise Security
+    - Splunk Cloud
+category: endpoint
+security_domain: endpoint
+tests:
+    - name: Native Edge and Chrome remote debugging replay
+      test_type: experimental
+      expected_results: 5
+      description: 'Native Windows 11, Edge 156 and Chrome 156, Sysmon 15.22, empty temporary profiles. Expected results: Edge headless port 9222, Edge off-screen port 9223, Edge port 0, Edge pipe, Chrome headless port 9224. Negatives: Edge with only --user-data-dir, and Edge --headless --disable-gpu --dump-dom without remote debugging. Debug ports were confirmed open via /json/version. Curated attack_data publication is pending.'

@@ -1,0 +1,117 @@
+{
+  "title": "dMSA (BadSuccessor) abuse via predecessor link without superseded-account link",
+  "issue": 4384,
+  "index": "ev_03_dmsa",
+  "dataset": "data/windows-events.log",
+  "dataset_sha256": "d55c7fdbd84d89bc0c8ab849e04dcd2f4973e1d9fbd5b224fc1b368f8600113c",
+  "events": 49,
+  "indexed_identical": true,
+  "environment": {
+    "replayed_utc": "2026-11-03 18:25 UTC",
+    "splunk": "enterprise 10.6.1.1",
+    "apps": [
+      "DA-ESS-ContentUpdate 6.9.2",
+      "Splunk_TA_microsoft_sysmon 5.0.0",
+      "Splunk_TA_windows 10.0.1"
+    ]
+  },
+  "searches": [
+    {
+      "name": "Windows AD dMSA Object Creation",
+      "kind": "proposed",
+      "note": "",
+      "expected": 2,
+      "actual": 2,
+      "passed": true,
+      "warnings": [],
+      "executed_search": "search index=ev_03_dmsa `wineventlog_security` EventCode=5137 ObjectClass=\"msDS-DelegatedManagedServiceAccount\"\n  | stats count min(_time) as firstTime max(_time) as lastTime values(ObjectDN) as dmsa_dn values(SubjectDomainName) as user_domain values(Computer) as dest\n    BY SubjectUserName ObjectGUID\n  | rename SubjectUserName as user\n  | `security_content_ctime(firstTime)`\n  | `security_content_ctime(lastTime)`\n  | search *",
+      "fields": [
+        "dest",
+        "user",
+        "dmsa_dn"
+      ],
+      "results": [
+        {
+          "user": "Administrator",
+          "ObjectGUID": "{0ff68b58-b01c-493e-baa3-323e18212708}",
+          "count": "1",
+          "firstTime": "2026-11-01T17:09:32",
+          "lastTime": "2026-11-01T17:09:32",
+          "dmsa_dn": "CN=dmsa0909a,OU=LabServiceAccounts,DC=lab,DC=local",
+          "user_domain": "LAB",
+          "dest": "WIN-9FBIF1KHFAH.lab.local"
+        },
+        {
+          "user": "Administrator",
+          "ObjectGUID": "{8f10812c-30e4-45b7-8943-78430c8db18c}",
+          "count": "1",
+          "firstTime": "2026-11-01T17:09:42",
+          "lastTime": "2026-11-01T17:09:42",
+          "dmsa_dn": "CN=dmsa0909b,OU=LabServiceAccounts,DC=lab,DC=local",
+          "user_domain": "LAB",
+          "dest": "WIN-9FBIF1KHFAH.lab.local"
+        }
+      ]
+    },
+    {
+      "name": "Windows AD dMSA Predecessor Link Without Superseded Account Link",
+      "kind": "proposed",
+      "note": "",
+      "expected": 1,
+      "actual": 1,
+      "passed": true,
+      "warnings": [],
+      "executed_search": "search index=ev_03_dmsa `wineventlog_security` EventCode=5136 OperationType IN (\"%%14674\", \"Value Added\")\n  AttributeLDAPDisplayName IN (\"msDS-ManagedAccountPrecededByLink\", \"msDS-SupersededManagedAccountLink\")\n  | eval dmsa_dn=lower(if(AttributeLDAPDisplayName=\"msDS-ManagedAccountPrecededByLink\", ObjectDN, AttributeValue)), predecessor_dn=lower(if(AttributeLDAPDisplayName=\"msDS-ManagedAccountPrecededByLink\", AttributeValue, ObjectDN))\n  | stats min(_time) as firstTime max(_time) as lastTime values(AttributeLDAPDisplayName) as attributes values(SubjectUserName) as user values(SubjectDomainName) as user_domain values(Computer) as dest\n    BY dmsa_dn predecessor_dn\n  | where mvcount(attributes)=1 AND attributes=\"msDS-ManagedAccountPrecededByLink\"\n  | `security_content_ctime(firstTime)`\n  | `security_content_ctime(lastTime)`\n  | search *",
+      "fields": [
+        "dest",
+        "user",
+        "dmsa_dn",
+        "predecessor_dn",
+        "attributes"
+      ],
+      "results": [
+        {
+          "dmsa_dn": "cn=dmsa0909a,ou=labserviceaccounts,dc=lab,dc=local",
+          "predecessor_dn": "cn=legacy0909a,ou=labserviceaccounts,dc=lab,dc=local",
+          "firstTime": "2026-11-01T17:09:32",
+          "lastTime": "2026-11-01T17:09:32",
+          "attributes": "msDS-ManagedAccountPrecededByLink",
+          "user": "Administrator",
+          "user_domain": "LAB",
+          "dest": "WIN-9FBIF1KHFAH.lab.local"
+        }
+      ]
+    },
+    {
+      "name": "Comparison: any write of msDS-ManagedAccountPrecededByLink (attribute-only logic)",
+      "kind": "comparison",
+      "note": "Alerting on every predecessor-link write also fires on Microsoft's supported migration (dmsa0909b). Expected 2 here: the attack and the legitimate migration.",
+      "expected": 2,
+      "actual": 2,
+      "passed": true,
+      "warnings": [],
+      "executed_search": "search index=ev_03_dmsa `wineventlog_security` EventCode=5136 AttributeLDAPDisplayName=\"msDS-ManagedAccountPrecededByLink\" OperationType IN (\"%%14674\", \"Value Added\")\n| stats count by ObjectDN AttributeValue SubjectUserName",
+      "fields": [
+        "ObjectDN",
+        "AttributeValue",
+        "SubjectUserName",
+        "count"
+      ],
+      "results": [
+        {
+          "ObjectDN": "CN=dmsa0909a,OU=LabServiceAccounts,DC=lab,DC=local",
+          "AttributeValue": "CN=legacy0909a,OU=LabServiceAccounts,DC=lab,DC=local",
+          "SubjectUserName": "Administrator",
+          "count": "1"
+        },
+        {
+          "ObjectDN": "CN=dmsa0909b,OU=LabServiceAccounts,DC=lab,DC=local",
+          "AttributeValue": "CN=legacy0909b,OU=LabServiceAccounts,DC=lab,DC=local",
+          "SubjectUserName": "Administrator",
+          "count": "1"
+        }
+      ]
+    }
+  ],
+  "passed": true
+}

@@ -1,0 +1,48 @@
+{
+  "title": "dMSA (BadSuccessor) abuse via predecessor link without superseded-account link",
+  "issue": 4384,
+  "index": "ev_03_dmsa",
+  "data": "data/windows-events.log",
+  "sourcetype": "XmlWinEventLog",
+  "source": "XmlWinEventLog:Security",
+  "host": "WIN-9FBIF1KHFAH.lab.local",
+  "searches": [
+    {
+      "name": "Windows AD dMSA Object Creation",
+      "kind": "proposed",
+      "expected": 2,
+      "spl": "`wineventlog_security` EventCode=5137 ObjectClass=\"msDS-DelegatedManagedServiceAccount\"\n  | stats count min(_time) as firstTime max(_time) as lastTime values(ObjectDN) as dmsa_dn values(SubjectDomainName) as user_domain values(Computer) as dest\n    BY SubjectUserName ObjectGUID\n  | rename SubjectUserName as user\n  | `security_content_ctime(firstTime)`\n  | `security_content_ctime(lastTime)`\n  | `windows_ad_dmsa_object_creation_filter`",
+      "fields": [
+        "dest",
+        "user",
+        "dmsa_dn"
+      ]
+    },
+    {
+      "name": "Windows AD dMSA Predecessor Link Without Superseded Account Link",
+      "kind": "proposed",
+      "expected": 1,
+      "spl": "`wineventlog_security` EventCode=5136 OperationType IN (\"%%14674\", \"Value Added\")\n  AttributeLDAPDisplayName IN (\"msDS-ManagedAccountPrecededByLink\", \"msDS-SupersededManagedAccountLink\")\n  | eval dmsa_dn=lower(if(AttributeLDAPDisplayName=\"msDS-ManagedAccountPrecededByLink\", ObjectDN, AttributeValue)), predecessor_dn=lower(if(AttributeLDAPDisplayName=\"msDS-ManagedAccountPrecededByLink\", AttributeValue, ObjectDN))\n  | stats min(_time) as firstTime max(_time) as lastTime values(AttributeLDAPDisplayName) as attributes values(SubjectUserName) as user values(SubjectDomainName) as user_domain values(Computer) as dest\n    BY dmsa_dn predecessor_dn\n  | where mvcount(attributes)=1 AND attributes=\"msDS-ManagedAccountPrecededByLink\"\n  | `security_content_ctime(firstTime)`\n  | `security_content_ctime(lastTime)`\n  | `windows_ad_dmsa_predecessor_link_without_superseded_account_link_filter`",
+      "fields": [
+        "dest",
+        "user",
+        "dmsa_dn",
+        "predecessor_dn",
+        "attributes"
+      ]
+    },
+    {
+      "name": "Comparison: any write of msDS-ManagedAccountPrecededByLink (attribute-only logic)",
+      "kind": "comparison",
+      "note": "Alerting on every predecessor-link write also fires on Microsoft's supported migration (dmsa0909b). Expected 2 here: the attack and the legitimate migration.",
+      "spl": "`wineventlog_security` EventCode=5136 AttributeLDAPDisplayName=\"msDS-ManagedAccountPrecededByLink\" OperationType IN (\"%%14674\", \"Value Added\")\n| stats count by ObjectDN AttributeValue SubjectUserName",
+      "fields": [
+        "ObjectDN",
+        "AttributeValue",
+        "SubjectUserName",
+        "count"
+      ],
+      "expected": 2
+    }
+  ]
+}

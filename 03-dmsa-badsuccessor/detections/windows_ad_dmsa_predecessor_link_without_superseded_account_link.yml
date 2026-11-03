@@ -1,0 +1,68 @@
+name: Windows AD dMSA Predecessor Link Without Superseded Account Link
+id: f3dd1c26-bb71-494e-950a-052e211ee641
+version: 1
+creation_date: '2026-11-01'
+modification_date: '2026-11-01'
+author: Nazar Diachok, Github Community
+status: experimental
+type: TTP
+description: This analytic detects a delegated Managed Service Account (dMSA) being linked to a predecessor account through msDS-ManagedAccountPrecededByLink without the matching msDS-SupersededManagedAccountLink being written on that predecessor account. This pattern was demonstrated by the BadSuccessor research, where an attacker who can create or write a dMSA links it to a privileged account, such as a domain administrator, and inherits that account's privileges, without needing any permission over the targeted account. Microsoft's supported migration cmdlets (Start-ADServiceAccountMigration and Complete-ADServiceAccountMigration) write both sides of the link, so legitimate migrations are excluded by correlating the two directory changes on the dMSA and predecessor distinguished names. The analytic uses Windows Security Event 5136. Microsoft addressed the privilege escalation in August 2025 (CVE-2025-53779); the directory change remains a strong indicator of attempted abuse on unpatched or mixed domains.
+data_source:
+    - Windows Event Log Security 5136
+search: |-
+    `wineventlog_security` EventCode=5136 OperationType IN ("%%14674", "Value Added")
+      AttributeLDAPDisplayName IN ("msDS-ManagedAccountPrecededByLink", "msDS-SupersededManagedAccountLink")
+      | eval dmsa_dn=lower(if(AttributeLDAPDisplayName="msDS-ManagedAccountPrecededByLink", ObjectDN, AttributeValue)), predecessor_dn=lower(if(AttributeLDAPDisplayName="msDS-ManagedAccountPrecededByLink", AttributeValue, ObjectDN))
+      | stats min(_time) as firstTime max(_time) as lastTime values(AttributeLDAPDisplayName) as attributes values(SubjectUserName) as user values(SubjectDomainName) as user_domain values(Computer) as dest
+        BY dmsa_dn predecessor_dn
+      | where mvcount(attributes)=1 AND attributes="msDS-ManagedAccountPrecededByLink"
+      | `security_content_ctime(firstTime)`
+      | `security_content_ctime(lastTime)`
+      | `windows_ad_dmsa_predecessor_link_without_superseded_account_link_filter`
+how_to_implement: To successfully implement this search, you need to be ingesting Windows Security Event Code 5136 from domain controllers. The Advanced Security Audit policy setting Audit Directory Service Changes within DS Access needs to be enabled, and the organizational units or containers where dMSAs can be created need a SACL that audits Write Property (inherited to descendant objects) so that changes to both dMSAs and user or computer accounts generate 5136. Run the search over a window long enough to contain both halves of a legitimate migration; Microsoft's cmdlets write them within milliseconds of each other. Delegated managed service accounts require a Windows Server 2025 domain controller. Tested on Windows Server 2025 Standard (build 26100).
+known_false_positives: Administrators or tools that set msDS-ManagedAccountPrecededByLink directly instead of using Start-ADServiceAccountMigration will match. A migration whose superseded-account change fell outside the search window, or was not audited because of SACL gaps, can also match. Review the predecessor account, its group memberships and the subject user.
+references:
+    - https://www.akamai.com/blog/security-research/abusing-dmsa-for-privilege-escalation-in-active-directory
+    - https://learn.microsoft.com/en-us/windows-server/security/delegated-managed-service-accounts/delegated-managed-service-accounts-set-up-dmsa
+    - https://msrc.microsoft.com/update-guide/vulnerability/CVE-2025-53779
+    - https://www.semperis.com/blog/how-to-block-badsuccessor/
+drilldown_searches:
+    - name: View the detection results for - "$user$" and "$dest$"
+      search: '%original_detection_search% | search user = "$user$" dest = "$dest$"'
+      earliest_offset: $info_min_time$
+      latest_offset: $info_max_time$
+    - name: View risk events for the last 7 days for - "$user$" and "$dest$"
+      search: '| from datamodel Risk.All_Risk | search normalized_risk_object IN ("$user$", "$dest$") | stats count min(_time) as firstTime max(_time) as lastTime values(search_name) as "Search Name" values(risk_message) as "Risk Message" values(analyticstories) as "Analytic Stories" values(annotations._all) as "Annotations" values(annotations.mitre_attack.mitre_tactic) as "ATT&CK Tactics" by normalized_risk_object | `security_content_ctime(firstTime)` | `security_content_ctime(lastTime)`'
+      earliest_offset: 7d
+      latest_offset: "0"
+finding:
+    title: dMSA $dmsa_dn$ was linked to predecessor $predecessor_dn$ by $user$ without a matching superseded-account link
+    entity:
+        field: user
+        type: user
+        score: 70
+intermediate_findings:
+    entities:
+        - field: dest
+          type: system
+          score: 70
+          message: dMSA $dmsa_dn$ was linked to predecessor $predecessor_dn$ by $user$ without a matching superseded-account link
+analytic_story:
+    - Active Directory Privilege Escalation
+asset_type: Endpoint
+cve:
+    - CVE-2025-53779
+mitre_attack_id:
+    - T1098
+    - T1078.002
+product:
+    - Splunk Enterprise
+    - Splunk Enterprise Security
+    - Splunk Cloud
+category: endpoint
+security_domain: endpoint
+tests:
+    - name: Native Windows Server 2025 dMSA replay
+      test_type: experimental
+      expected_results: 1
+      description: 'Windows Server 2025 Standard Evaluation (build 26100), single-DC lab domain, auditing via Directory Service Changes and a Write Property SACL. One dMSA linked by a direct msDS-ManagedAccountPrecededByLink write (expected result), and one dMSA migrated with Start-ADServiceAccountMigration and Complete-ADServiceAccountMigration, which also writes msDS-SupersededManagedAccountLink on the predecessor (must not match). Curated attack_data publication is pending.'

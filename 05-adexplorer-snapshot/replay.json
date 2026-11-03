@@ -1,0 +1,62 @@
+{
+  "title": "Sysinternals ADExplorer Active Directory snapshots",
+  "issue": 4393,
+  "index": "ev_05_adexplorer",
+  "data": "data/windows-events.log",
+  "sourcetype": "XmlWinEventLog",
+  "source": "XmlWinEventLog:Microsoft-Windows-Sysmon/Operational",
+  "host": "WIN-9FBIF1KHFAH.lab.local",
+  "searches": [
+    {
+      "name": "Windows AD Snapshot Created By ADExplorer",
+      "kind": "proposed",
+      "expected": 4,
+      "spl": "`sysmon` ((EventCode=1 OriginalFileName=\"AdExp\") OR EventCode=11)\n  | eval snapshot_file=if(EventCode=11 AND NOT match(TargetFilename, \"(?i)\\\\\\\\SchCache\\\\\\\\[^\\\\\\\\]+\\\\.sch$\"), TargetFilename, null())\n  | stats min(_time) as firstTime max(_time) as lastTime values(OriginalFileName) as original_file_name values(Image) as process_path values(CommandLine) as process values(ParentImage) as parent_process_path values(User) as user values(snapshot_file) as snapshot_file\n    BY Computer ProcessGuid\n  | where original_file_name=\"AdExp\" AND isnotnull(snapshot_file)\n  | rename Computer as dest, ProcessGuid as process_guid\n  | `security_content_ctime(firstTime)`\n  | `security_content_ctime(lastTime)`\n  | `windows_ad_snapshot_created_by_adexplorer_filter`",
+      "fields": [
+        "dest",
+        "user",
+        "process_path",
+        "snapshot_file"
+      ]
+    },
+    {
+      "name": "Windows Sysinternals ADExplorer Execution",
+      "kind": "proposed",
+      "expected": 5,
+      "spl": "| tstats `security_content_summariesonly`\n  count min(_time) as firstTime\n        max(_time) as lastTime\n\nfrom datamodel=Endpoint.Processes where\n\n(Processes.process_name IN (\"ADExplorer.exe\", \"ADExplorer64.exe\", \"ADExplorer64a.exe\", \"ADExp.exe\") OR Processes.original_file_name=\"AdExp\")\n\nby Processes.action Processes.dest Processes.original_file_name Processes.parent_process Processes.parent_process_exec\n   Processes.parent_process_guid Processes.parent_process_id Processes.parent_process_name Processes.parent_process_path\n   Processes.process Processes.process_exec Processes.process_guid Processes.process_hash Processes.process_id\n   Processes.process_integrity_level Processes.process_name Processes.process_path Processes.user Processes.user_id\n   Processes.vendor_product\n\n| `drop_dm_object_name(Processes)`\n| eval renamed=if(match(process_name, \"(?i)^ADExp(lorer)?(64a?)?\\\\.exe$\"), \"no\", \"yes\")\n| eval snapshot_cli=if(like(lower(process), \"%snapshot%\"), \"yes\", \"no\")\n| `security_content_ctime(firstTime)`\n| `security_content_ctime(lastTime)`\n| `windows_sysinternals_adexplorer_execution_filter`",
+      "fields": [
+        "dest",
+        "user",
+        "process_name",
+        "original_file_name",
+        "renamed",
+        "snapshot_cli",
+        "process"
+      ]
+    },
+    {
+      "name": "Comparison: Sigma-style process logic (ADExplorer image name + \"snapshot\" argument)",
+      "kind": "comparison",
+      "note": "Image-name and command-line logic, as in the public Sigma rules. It misses the renamed copy and the GUI menu snapshot.",
+      "spl": "`sysmon` EventCode=1 process_name IN (\"ADExplorer.exe\", \"ADExplorer64.exe\", \"ADExp.exe\", \"ADExplorer64a.exe\") process=\"*snapshot*\"\n| table _time process_name process",
+      "fields": [
+        "_time",
+        "process_name",
+        "process"
+      ],
+      "expected": 2
+    },
+    {
+      "name": "Comparison: Sigma-style file logic (ADExplorer image writes a .dat file)",
+      "kind": "comparison",
+      "note": "It misses the renamed copy and the .tmp snapshot.",
+      "spl": "`sysmon` EventCode=11 process_name IN (\"ADExplorer.exe\", \"ADExplorer64.exe\", \"ADExp.exe\", \"ADExplorer64a.exe\") TargetFilename=\"*.dat\"\n| table _time process_name TargetFilename",
+      "fields": [
+        "_time",
+        "process_name",
+        "TargetFilename"
+      ],
+      "expected": 2
+    }
+  ]
+}

@@ -1,0 +1,297 @@
+{
+  "title": "Sysinternals ADExplorer Active Directory snapshots",
+  "issue": 4393,
+  "index": "ev_05_adexplorer",
+  "dataset": "data/windows-events.log",
+  "dataset_sha256": "401d49e8fb1127fc2278843208c70617948c42ec0de8ff6232ae5ba5a50bc747",
+  "events": 127,
+  "indexed_identical": true,
+  "environment": {
+    "replayed_utc": "2026-11-03 18:25 UTC",
+    "splunk": "enterprise 10.6.1.1",
+    "apps": [
+      "DA-ESS-ContentUpdate 6.9.2",
+      "Splunk_TA_microsoft_sysmon 5.0.0",
+      "Splunk_TA_windows 10.0.1"
+    ]
+  },
+  "searches": [
+    {
+      "name": "Windows AD Snapshot Created By ADExplorer",
+      "kind": "proposed",
+      "note": "",
+      "expected": 4,
+      "actual": 4,
+      "passed": true,
+      "warnings": [],
+      "executed_search": "search index=ev_05_adexplorer `sysmon` ((EventCode=1 OriginalFileName=\"AdExp\") OR EventCode=11)\n  | eval snapshot_file=if(EventCode=11 AND NOT match(TargetFilename, \"(?i)\\\\\\\\SchCache\\\\\\\\[^\\\\\\\\]+\\\\.sch$\"), TargetFilename, null())\n  | stats min(_time) as firstTime max(_time) as lastTime values(OriginalFileName) as original_file_name values(Image) as process_path values(CommandLine) as process values(ParentImage) as parent_process_path values(User) as user values(snapshot_file) as snapshot_file\n    BY Computer ProcessGuid\n  | where original_file_name=\"AdExp\" AND isnotnull(snapshot_file)\n  | rename Computer as dest, ProcessGuid as process_guid\n  | `security_content_ctime(firstTime)`\n  | `security_content_ctime(lastTime)`\n  | search *",
+      "fields": [
+        "dest",
+        "user",
+        "process_path",
+        "snapshot_file"
+      ],
+      "results": [
+        {
+          "dest": "WIN-9FBIF1KHFAH.lab.local",
+          "process_guid": "{6924c894-84b1-6ae8-d200-000000000500}",
+          "firstTime": "2026-11-02T12:40:17",
+          "lastTime": "2026-11-02T12:40:18",
+          "original_file_name": "AdExp",
+          "process_path": "C:\\ADLab\\tools\\ADExplorer64.exe",
+          "process": "\"C:\\ADLab\\tools\\ADExplorer64.exe\" -snapshot \"\" \"C:\\ADLab\\run-20261102-044002\\snap-cli.dat\"",
+          "parent_process_path": "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
+          "user": "LAB\\Administrator",
+          "snapshot_file": "C:\\ADLab\\run-20261102-044002\\snap-cli.dat"
+        },
+        {
+          "dest": "WIN-9FBIF1KHFAH.lab.local",
+          "process_guid": "{6924c894-84b8-6ae8-d300-000000000500}",
+          "firstTime": "2026-11-02T12:40:24",
+          "lastTime": "2026-11-02T12:40:26",
+          "original_file_name": "AdExp",
+          "process_path": "C:\\ADLab\\tools\\ADExplorer64.exe",
+          "process": "\"C:\\ADLab\\tools\\ADExplorer64.exe\" -snapshot \"\" \"C:\\ADLab\\run-20261102-044002\\cache-0001.tmp\"",
+          "parent_process_path": "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
+          "user": "LAB\\Administrator",
+          "snapshot_file": "C:\\ADLab\\run-20261102-044002\\cache-0001.tmp"
+        },
+        {
+          "dest": "WIN-9FBIF1KHFAH.lab.local",
+          "process_guid": "{6924c894-84c3-6ae8-d400-000000000500}",
+          "firstTime": "2026-11-02T12:40:35",
+          "lastTime": "2026-11-02T12:40:37",
+          "original_file_name": "AdExp",
+          "process_path": "C:\\ADLab\\run-20261102-044002\\svc-helper.exe",
+          "process": "\"C:\\ADLab\\run-20261102-044002\\svc-helper.exe\" -snapshot \"\" \"C:\\ADLab\\run-20261102-044002\\snap-renamed.dat\"",
+          "parent_process_path": "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
+          "user": "LAB\\Administrator",
+          "snapshot_file": "C:\\ADLab\\run-20261102-044002\\snap-renamed.dat"
+        },
+        {
+          "dest": "WIN-9FBIF1KHFAH.lab.local",
+          "process_guid": "{6924c894-84d6-6ae8-d800-000000000500}",
+          "firstTime": "2026-11-02T12:40:54",
+          "lastTime": "2026-11-02T12:41:30",
+          "original_file_name": "AdExp",
+          "process_path": "C:\\ADLab\\tools\\ADExplorer64.exe",
+          "process": "\"C:\\ADLab\\tools\\ADExplorer64.exe\"",
+          "parent_process_path": "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
+          "user": "LAB\\Administrator",
+          "snapshot_file": "C:\\ADLab\\run-20261102-044002\\snap-gui.dat"
+        }
+      ]
+    },
+    {
+      "name": "Windows Sysinternals ADExplorer Execution",
+      "kind": "proposed",
+      "note": "",
+      "expected": 5,
+      "actual": 5,
+      "passed": true,
+      "warnings": [],
+      "executed_search": "| tstats `security_content_summariesonly`\n  count min(_time) as firstTime\n        max(_time) as lastTime\n\nfrom datamodel=Endpoint.Processes where index=ev_05_adexplorer\n\n(Processes.process_name IN (\"ADExplorer.exe\", \"ADExplorer64.exe\", \"ADExplorer64a.exe\", \"ADExp.exe\") OR Processes.original_file_name=\"AdExp\")\n\nby Processes.action Processes.dest Processes.original_file_name Processes.parent_process Processes.parent_process_exec\n   Processes.parent_process_guid Processes.parent_process_id Processes.parent_process_name Processes.parent_process_path\n   Processes.process Processes.process_exec Processes.process_guid Processes.process_hash Processes.process_id\n   Processes.process_integrity_level Processes.process_name Processes.process_path Processes.user Processes.user_id\n   Processes.vendor_product\n\n| `drop_dm_object_name(Processes)`\n| eval renamed=if(match(process_name, \"(?i)^ADExp(lorer)?(64a?)?\\\\.exe$\"), \"no\", \"yes\")\n| eval snapshot_cli=if(like(lower(process), \"%snapshot%\"), \"yes\", \"no\")\n| `security_content_ctime(firstTime)`\n| `security_content_ctime(lastTime)`\n| search *",
+      "fields": [
+        "dest",
+        "user",
+        "process_name",
+        "original_file_name",
+        "renamed",
+        "snapshot_cli",
+        "process"
+      ],
+      "results": [
+        {
+          "action": "allowed",
+          "dest": "WIN-9FBIF1KHFAH.lab.local",
+          "original_file_name": "AdExp",
+          "parent_process": "\"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe\"",
+          "parent_process_exec": "powershell.exe",
+          "parent_process_guid": "{6924c894-849b-6ae8-c300-000000000500}",
+          "parent_process_id": "5868",
+          "parent_process_name": "powershell.exe",
+          "parent_process_path": "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
+          "process": "\"C:\\ADLab\\run-20261102-044002\\svc-helper.exe\" -snapshot \"\" \"C:\\ADLab\\run-20261102-044002\\snap-renamed.dat\"",
+          "process_exec": "svc-helper.exe",
+          "process_guid": "{6924c894-84c3-6ae8-d400-000000000500}",
+          "process_hash": "SHA256=E451287843B3927C6046EAABD3E22B929BC1F445EEC23A73B1398B115D02E4FB",
+          "process_id": "1244",
+          "process_integrity_level": "high",
+          "process_name": "svc-helper.exe",
+          "process_path": "C:\\ADLab\\run-20261102-044002\\svc-helper.exe",
+          "user": "Administrator",
+          "user_id": "'S-1-5-18'",
+          "vendor_product": "Microsoft Sysmon",
+          "count": "1",
+          "firstTime": "2026-11-02T12:40:35",
+          "lastTime": "2026-11-02T12:40:35",
+          "renamed": "yes",
+          "snapshot_cli": "yes"
+        },
+        {
+          "action": "allowed",
+          "dest": "WIN-9FBIF1KHFAH.lab.local",
+          "original_file_name": "AdExp",
+          "parent_process": "\"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe\"",
+          "parent_process_exec": "powershell.exe",
+          "parent_process_guid": "{6924c894-849b-6ae8-c300-000000000500}",
+          "parent_process_id": "5868",
+          "parent_process_name": "powershell.exe",
+          "parent_process_path": "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
+          "process": "\"C:\\ADLab\\tools\\ADExplorer64.exe\"",
+          "process_exec": "ADExplorer64.exe",
+          "process_guid": "{6924c894-84cd-6ae8-d700-000000000500}",
+          "process_hash": "SHA256=E451287843B3927C6046EAABD3E22B929BC1F445EEC23A73B1398B115D02E4FB",
+          "process_id": "5448",
+          "process_integrity_level": "high",
+          "process_name": "ADExplorer64.exe",
+          "process_path": "C:\\ADLab\\tools\\ADExplorer64.exe",
+          "user": "Administrator",
+          "user_id": "'S-1-5-18'",
+          "vendor_product": "Microsoft Sysmon",
+          "count": "1",
+          "firstTime": "2026-11-02T12:40:45",
+          "lastTime": "2026-11-02T12:40:45",
+          "renamed": "no",
+          "snapshot_cli": "no"
+        },
+        {
+          "action": "allowed",
+          "dest": "WIN-9FBIF1KHFAH.lab.local",
+          "original_file_name": "AdExp",
+          "parent_process": "\"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe\"",
+          "parent_process_exec": "powershell.exe",
+          "parent_process_guid": "{6924c894-849b-6ae8-c300-000000000500}",
+          "parent_process_id": "5868",
+          "parent_process_name": "powershell.exe",
+          "parent_process_path": "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
+          "process": "\"C:\\ADLab\\tools\\ADExplorer64.exe\"",
+          "process_exec": "ADExplorer64.exe",
+          "process_guid": "{6924c894-84d6-6ae8-d800-000000000500}",
+          "process_hash": "SHA256=E451287843B3927C6046EAABD3E22B929BC1F445EEC23A73B1398B115D02E4FB",
+          "process_id": "6856",
+          "process_integrity_level": "high",
+          "process_name": "ADExplorer64.exe",
+          "process_path": "C:\\ADLab\\tools\\ADExplorer64.exe",
+          "user": "Administrator",
+          "user_id": "'S-1-5-18'",
+          "vendor_product": "Microsoft Sysmon",
+          "count": "1",
+          "firstTime": "2026-11-02T12:40:54",
+          "lastTime": "2026-11-02T12:40:54",
+          "renamed": "no",
+          "snapshot_cli": "no"
+        },
+        {
+          "action": "allowed",
+          "dest": "WIN-9FBIF1KHFAH.lab.local",
+          "original_file_name": "AdExp",
+          "parent_process": "\"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe\"",
+          "parent_process_exec": "powershell.exe",
+          "parent_process_guid": "{6924c894-849b-6ae8-c300-000000000500}",
+          "parent_process_id": "5868",
+          "parent_process_name": "powershell.exe",
+          "parent_process_path": "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
+          "process": "\"C:\\ADLab\\tools\\ADExplorer64.exe\" -snapshot \"\" \"C:\\ADLab\\run-20261102-044002\\cache-0001.tmp\"",
+          "process_exec": "ADExplorer64.exe",
+          "process_guid": "{6924c894-84b8-6ae8-d300-000000000500}",
+          "process_hash": "SHA256=E451287843B3927C6046EAABD3E22B929BC1F445EEC23A73B1398B115D02E4FB",
+          "process_id": "2220",
+          "process_integrity_level": "high",
+          "process_name": "ADExplorer64.exe",
+          "process_path": "C:\\ADLab\\tools\\ADExplorer64.exe",
+          "user": "Administrator",
+          "user_id": "'S-1-5-18'",
+          "vendor_product": "Microsoft Sysmon",
+          "count": "1",
+          "firstTime": "2026-11-02T12:40:24",
+          "lastTime": "2026-11-02T12:40:24",
+          "renamed": "no",
+          "snapshot_cli": "yes"
+        },
+        {
+          "action": "allowed",
+          "dest": "WIN-9FBIF1KHFAH.lab.local",
+          "original_file_name": "AdExp",
+          "parent_process": "\"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe\"",
+          "parent_process_exec": "powershell.exe",
+          "parent_process_guid": "{6924c894-849b-6ae8-c300-000000000500}",
+          "parent_process_id": "5868",
+          "parent_process_name": "powershell.exe",
+          "parent_process_path": "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
+          "process": "\"C:\\ADLab\\tools\\ADExplorer64.exe\" -snapshot \"\" \"C:\\ADLab\\run-20261102-044002\\snap-cli.dat\"",
+          "process_exec": "ADExplorer64.exe",
+          "process_guid": "{6924c894-84b1-6ae8-d200-000000000500}",
+          "process_hash": "SHA256=E451287843B3927C6046EAABD3E22B929BC1F445EEC23A73B1398B115D02E4FB",
+          "process_id": "4512",
+          "process_integrity_level": "high",
+          "process_name": "ADExplorer64.exe",
+          "process_path": "C:\\ADLab\\tools\\ADExplorer64.exe",
+          "user": "Administrator",
+          "user_id": "'S-1-5-18'",
+          "vendor_product": "Microsoft Sysmon",
+          "count": "1",
+          "firstTime": "2026-11-02T12:40:17",
+          "lastTime": "2026-11-02T12:40:17",
+          "renamed": "no",
+          "snapshot_cli": "yes"
+        }
+      ]
+    },
+    {
+      "name": "Comparison: Sigma-style process logic (ADExplorer image name + \"snapshot\" argument)",
+      "kind": "comparison",
+      "note": "Image-name and command-line logic, as in the public Sigma rules. It misses the renamed copy and the GUI menu snapshot.",
+      "expected": 2,
+      "actual": 2,
+      "passed": true,
+      "warnings": [],
+      "executed_search": "search index=ev_05_adexplorer `sysmon` EventCode=1 process_name IN (\"ADExplorer.exe\", \"ADExplorer64.exe\", \"ADExp.exe\", \"ADExplorer64a.exe\") process=\"*snapshot*\"\n| table _time process_name process",
+      "fields": [
+        "_time",
+        "process_name",
+        "process"
+      ],
+      "results": [
+        {
+          "_time": "2026-11-02 12:40:24.758 GMT",
+          "process_name": "ADExplorer64.exe",
+          "process": "\"C:\\ADLab\\tools\\ADExplorer64.exe\" -snapshot \"\" \"C:\\ADLab\\run-20261102-044002\\cache-0001.tmp\""
+        },
+        {
+          "_time": "2026-11-02 12:40:17.218 GMT",
+          "process_name": "ADExplorer64.exe",
+          "process": "\"C:\\ADLab\\tools\\ADExplorer64.exe\" -snapshot \"\" \"C:\\ADLab\\run-20261102-044002\\snap-cli.dat\""
+        }
+      ]
+    },
+    {
+      "name": "Comparison: Sigma-style file logic (ADExplorer image writes a .dat file)",
+      "kind": "comparison",
+      "note": "It misses the renamed copy and the .tmp snapshot.",
+      "expected": 2,
+      "actual": 2,
+      "passed": true,
+      "warnings": [],
+      "executed_search": "search index=ev_05_adexplorer `sysmon` EventCode=11 process_name IN (\"ADExplorer.exe\", \"ADExplorer64.exe\", \"ADExp.exe\", \"ADExplorer64a.exe\") TargetFilename=\"*.dat\"\n| table _time process_name TargetFilename",
+      "fields": [
+        "_time",
+        "process_name",
+        "TargetFilename"
+      ],
+      "results": [
+        {
+          "_time": "2026-11-02 12:41:30.931 GMT",
+          "process_name": "ADExplorer64.exe",
+          "TargetFilename": "C:\\ADLab\\run-20261102-044002\\snap-gui.dat"
+        },
+        {
+          "_time": "2026-11-02 12:40:18.286 GMT",
+          "process_name": "ADExplorer64.exe",
+          "TargetFilename": "C:\\ADLab\\run-20261102-044002\\snap-cli.dat"
+        }
+      ]
+    }
+  ],
+  "passed": true
+}

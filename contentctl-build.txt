@@ -1,0 +1,28 @@
+splunk/security_content develop c95d72f, contentctl-ng 1.1.1, 2026-11-03 18:18 UTC
+Added 9 proposed detections:
+  detections/endpoint/windows_ssh_keygen_unsigned_pkcs11_provider_load.yml
+  detections/endpoint/windows_winget_configuration_file_from_remote_url.yml
+  detections/endpoint/windows_winget_configuration_remoting_server_execution.yml
+  detections/endpoint/windows_ad_dmsa_object_creation.yml
+  detections/endpoint/windows_ad_dmsa_predecessor_link_without_superseded_account_link.yml
+  detections/endpoint/windows_chromium_browser_remote_debugging_enabled.yml
+  detections/endpoint/windows_non_browser_process_connection_to_chromium_devtools_port.yml
+  detections/endpoint/windows_ad_snapshot_created_by_adexplorer.yml
+  detections/endpoint/windows_sysinternals_adexplorer_execution.yml
+
+== scripts/enforce_yaml_field_order.py ==
+[PASS] Root field order is valid for 9 file(s)
+
+== contentctl-ng build ==
+2026-11-03 18:18:15,500 contentctl_ng.build: Successfully built app at /home/omni/escu-evidence-contentctl/security_content/dist/DA-ESS-ContentUpdate
+2026-11-03 18:18:16,583 contentctl_ng.output.api_json_output: Writing 2213 detections to detections_v2.json
+built: ESCU - Windows SSH Keygen Unsigned PKCS11 Provider Load - Rule
+built: ESCU - Windows WinGet Configuration File From Remote URL - Rule
+built: ESCU - Windows WinGet Configuration Remoting Server Execution - Rule
+built: ESCU - Windows AD dMSA Object Creation - Rule
+built: ESCU - Windows AD dMSA Predecessor Link Without Superseded Account Link - Rule
+built: ESCU - Windows Chromium Browser Remote Debugging Enabled - Rule
+built: ESCU - Windows Non-Browser Process Connection To Chromium DevTools Port - Rule
+built: ESCU - Windows AD Snapshot Created By ADExplorer - Rule
+built: ESCU - Windows Sysinternals ADExplorer Execution - Rule
+exit code: 0

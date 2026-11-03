@@ -1,0 +1,39 @@
+<!--
+  Sysmon configuration used for the WinGet capture (also keeps the ssh-keygen rules from proposal 01).
+-->
+<Sysmon schemaversion="4.50">
+  <HashAlgorithms>sha256</HashAlgorithms>
+  <CheckRevocation/>
+  <EventFiltering>
+    <RuleGroup name="" groupRelation="or">
+      <ProcessCreate onmatch="include">
+        <Image condition="end with">\ssh-keygen.exe</Image>
+        <Image condition="end with">\winget.exe</Image>
+        <Image condition="end with">\ConfigurationRemotingServer.exe</Image>
+        <Image condition="end with">\WindowsPackageManagerServer.exe</Image>
+        <ParentImage condition="end with">\winget.exe</ParentImage>
+        <ParentImage condition="end with">\ConfigurationRemotingServer.exe</ParentImage>
+        <ParentImage condition="end with">\WindowsPackageManagerServer.exe</ParentImage>
+      </ProcessCreate>
+    </RuleGroup>
+    <RuleGroup name="" groupRelation="or">
+      <NetworkConnect onmatch="include">
+        <Image condition="end with">\winget.exe</Image>
+        <Image condition="end with">\ConfigurationRemotingServer.exe</Image>
+        <Image condition="end with">\WindowsPackageManagerServer.exe</Image>
+      </NetworkConnect>
+    </RuleGroup>
+    <RuleGroup name="" groupRelation="or">
+      <ImageLoad onmatch="include">
+        <Image condition="end with">\ssh-keygen.exe</Image>
+        <ImageLoaded condition="end with">\Microsoft.Management.Configuration.dll</ImageLoaded>
+      </ImageLoad>
+    </RuleGroup>
+    <RuleGroup name="" groupRelation="or">
+      <FileCreate onmatch="include">
+        <Image condition="end with">\ConfigurationRemotingServer.exe</Image>
+        <Image condition="end with">\WindowsPackageManagerServer.exe</Image>
+      </FileCreate>
+    </RuleGroup>
+  </EventFiltering>
+</Sysmon>

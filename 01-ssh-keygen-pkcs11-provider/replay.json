@@ -1,0 +1,25 @@
+{
+  "title": "Windows ssh-keygen loading an unsigned PKCS#11 provider DLL",
+  "issue": 4382,
+  "index": "ev_01_ssh",
+  "data": "data/windows-events.log",
+  "sourcetype": "XmlWinEventLog",
+  "source": "XmlWinEventLog:Microsoft-Windows-Sysmon/Operational",
+  "host": "WIN-PKCS11-LAB",
+  "searches": [
+    {
+      "name": "Windows SSH Keygen Unsigned PKCS11 Provider Load",
+      "kind": "proposed",
+      "expected": 13,
+      "spl": "`sysmon` EventCode IN (1,7) process_name=\"ssh-keygen.exe\"\n    | eval process_command_line=if(EventCode=1,process,null())\n    | eventstats values(process_command_line) AS process_command_line by dest process_guid\n    | where EventCode=7 AND NOT match(ImageLoaded,\"(?i)^[a-z]:\\\\\\\\(windows|program files[^\\\\\\\\]*)\\\\\\\\\") AND (lower(Signed)=\"false\" OR coalesce(SignatureStatus,\"\")!=\"Valid\")\n    | stats count min(_time) AS firstTime max(_time) AS lastTime values(process_command_line) AS process values(process_id) AS process_id values(process_name) AS process_name values(user) AS user values(Signed) AS Signed values(SignatureStatus) AS SignatureStatus by dest process_guid Image ImageLoaded\n    | `security_content_ctime(firstTime)`\n    | `security_content_ctime(lastTime)`\n    | `windows_ssh_keygen_unsigned_pkcs11_provider_load_filter`",
+      "fields": [
+        "dest",
+        "user",
+        "ImageLoaded",
+        "Signed",
+        "SignatureStatus",
+        "process"
+      ]
+    }
+  ]
+}

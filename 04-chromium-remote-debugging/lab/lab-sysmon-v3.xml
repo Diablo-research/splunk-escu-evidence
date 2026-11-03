@@ -1,0 +1,46 @@
+<!--
+  Sysmon configuration used for the Chromium capture (also keeps the rules from proposals 01 and 02).
+  Logs every Edge/Chrome/Brave process start. Plain conditions only: Sysmon 15.22 ignored "any" list conditions under schema 4.50.
+-->
+<Sysmon schemaversion="4.50">
+  <HashAlgorithms>sha256</HashAlgorithms>
+  <CheckRevocation/>
+  <EventFiltering>
+    <RuleGroup name="" groupRelation="or">
+      <ProcessCreate onmatch="include">
+        <Image condition="end with">\ssh-keygen.exe</Image>
+        <Image condition="end with">\winget.exe</Image>
+        <Image condition="end with">\ConfigurationRemotingServer.exe</Image>
+        <Image condition="end with">\WindowsPackageManagerServer.exe</Image>
+        <ParentImage condition="end with">\winget.exe</ParentImage>
+        <ParentImage condition="end with">\ConfigurationRemotingServer.exe</ParentImage>
+        <ParentImage condition="end with">\WindowsPackageManagerServer.exe</ParentImage>
+        <Image condition="end with">\msedge.exe</Image>
+        <Image condition="end with">\chrome.exe</Image>
+        <Image condition="end with">\brave.exe</Image>
+      </ProcessCreate>
+    </RuleGroup>
+    <RuleGroup name="" groupRelation="or">
+      <NetworkConnect onmatch="include">
+        <Image condition="end with">\winget.exe</Image>
+        <Image condition="end with">\ConfigurationRemotingServer.exe</Image>
+        <Image condition="end with">\WindowsPackageManagerServer.exe</Image>
+        <DestinationPort condition="is">9222</DestinationPort>
+        <DestinationPort condition="is">9223</DestinationPort>
+        <DestinationPort condition="is">9224</DestinationPort>
+      </NetworkConnect>
+    </RuleGroup>
+    <RuleGroup name="" groupRelation="or">
+      <ImageLoad onmatch="include">
+        <Image condition="end with">\ssh-keygen.exe</Image>
+        <ImageLoaded condition="end with">\Microsoft.Management.Configuration.dll</ImageLoaded>
+      </ImageLoad>
+    </RuleGroup>
+    <RuleGroup name="" groupRelation="or">
+      <FileCreate onmatch="include">
+        <Image condition="end with">\ConfigurationRemotingServer.exe</Image>
+        <Image condition="end with">\WindowsPackageManagerServer.exe</Image>
+      </FileCreate>
+    </RuleGroup>
+  </EventFiltering>
+</Sysmon>

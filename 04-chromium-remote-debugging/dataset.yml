@@ -1,0 +1,16 @@
+author: Nazar Diachok
+id: 667f6ce8-288a-59f9-8bb4-a3fd024fa1da
+date: '2026-11-03'
+description: Native lab capture for the "Chromium remote debugging used for cookie
+  theft" detection proposal (splunk/security_content#4389). See README.md for the
+  lab and test cases.
+environment: 'custom lab (see LAB.md): Windows 11 host'
+directory: 04-chromium-remote-debugging
+mitre_technique:
+- T1539
+- T1185
+datasets:
+- name: windows-events
+  path: data/windows-events.log
+  sourcetype: XmlWinEventLog
+  source: XmlWinEventLog:Microsoft-Windows-Sysmon/Operational

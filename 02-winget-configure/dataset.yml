@@ -1,0 +1,16 @@
+author: Nazar Diachok
+id: e9a4a279-f5fe-5155-ae75-b081153017de
+date: '2026-11-03'
+description: Native lab capture for the "WinGet Configuration (winget configure) abuse"
+  detection proposal (splunk/security_content#4383). See README.md for the lab and
+  test cases.
+environment: 'custom lab (see LAB.md): Windows 11 host'
+directory: 02-winget-configure
+mitre_technique:
+- T1059.001
+- T1105
+datasets:
+- name: windows-events
+  path: data/windows-events.log
+  sourcetype: XmlWinEventLog
+  source: XmlWinEventLog:Microsoft-Windows-Sysmon/Operational

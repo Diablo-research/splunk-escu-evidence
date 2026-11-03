@@ -1,0 +1,30 @@
+<!-- Sysmon config for the ADExplorer lab DC (VM only). Apply: Sysmon64.exe -accepteula -i adx-sysmon.xml -->
+<Sysmon schemaversion="4.50">
+  <HashAlgorithms>sha256</HashAlgorithms>
+  <CheckRevocation/>
+  <EventFiltering>
+    <RuleGroup name="" groupRelation="or">
+      <ProcessCreate onmatch="exclude"/>
+    </RuleGroup>
+    <RuleGroup name="" groupRelation="or">
+      <FileCreate onmatch="include">
+        <TargetFilename condition="begin with">C:\ADLab\</TargetFilename>
+        <Image condition="end with">\ADExplorer.exe</Image>
+        <Image condition="end with">\ADExplorer64.exe</Image>
+      </FileCreate>
+    </RuleGroup>
+    <RuleGroup name="" groupRelation="or">
+      <NetworkConnect onmatch="include">
+        <DestinationPort condition="is">389</DestinationPort>
+        <DestinationPort condition="is">636</DestinationPort>
+        <DestinationPort condition="is">3268</DestinationPort>
+        <DestinationPort condition="is">3269</DestinationPort>
+      </NetworkConnect>
+    </RuleGroup>
+    <RuleGroup name="" groupRelation="or">
+      <RegistryEvent onmatch="include">
+        <TargetObject condition="contains">\Sysinternals\</TargetObject>
+      </RegistryEvent>
+    </RuleGroup>
+  </EventFiltering>
+</Sysmon>

@@ -1,0 +1,81 @@
+name: Windows WinGet Configuration Remoting Server Execution
+id: 5d82a60b-c6a6-46d7-b52d-e0512a669579
+version: 1
+creation_date: '2026-11-01'
+modification_date: '2026-11-01'
+author: Nazar Diachok, Github Community
+status: experimental
+type: Anomaly
+description: This analytic detects ConfigurationRemotingServer.exe being launched by winget.exe or WindowsPackageManagerServer.exe. WinGet starts this process to evaluate a WinGet Configuration (DSC) file, and PowerShell DSC resources in that file, such as Script resources, run inside it rather than in powershell.exe. Adversaries can use winget configure with a local or remote configuration file to execute code or make system changes through a signed Microsoft binary. Because the analytic keys on the process launch instead of the winget command line, it also covers command aliases (configure, configuration, dsc), positional file arguments, arbitrary file extensions and the WinGet COM API. The configuration_action field separates preview subcommands (show, validate, list, test) from configurations that are actually applied.
+data_source:
+    - Sysmon EventID 1
+search: |-
+    | tstats `security_content_summariesonly`
+      count min(_time) as firstTime
+            max(_time) as lastTime
+
+    from datamodel=Endpoint.Processes where
+
+    Processes.process_name="ConfigurationRemotingServer.exe"
+    Processes.parent_process_name IN ("winget.exe", "WindowsPackageManagerServer.exe")
+
+    by Processes.action Processes.dest Processes.original_file_name Processes.parent_process Processes.parent_process_exec
+       Processes.parent_process_guid Processes.parent_process_id Processes.parent_process_name Processes.parent_process_path
+       Processes.process Processes.process_exec Processes.process_guid Processes.process_hash Processes.process_id
+       Processes.process_integrity_level Processes.process_name Processes.process_path Processes.user Processes.user_id
+       Processes.vendor_product
+
+    | `drop_dm_object_name(Processes)`
+    | eval configuration_action=if(match(parent_process, "(?i)\s(configure|configuration|dsc)\s+(show|view|validate|list|ls|test)\b"), "preview", "apply")
+    | `security_content_ctime(firstTime)`
+    | `security_content_ctime(lastTime)`
+    | `windows_winget_configuration_remoting_server_execution_filter`
+how_to_implement: The detection is based on data that originates from Endpoint Detection and Response (EDR) agents. These agents are designed to provide security-related telemetry from the endpoints where the agent is installed. To implement this search, you must ingest logs that contain the process GUID, process name, and parent process. Additionally, you must ingest complete command-line executions. These logs must be processed using the appropriate Splunk Technology Add-ons that are specific to the EDR product. The logs must also be mapped to the `Processes` node of the `Endpoint` data model. Use the Splunk Common Information Model (CIM) to normalize the field names and speed up the data modeling process. WinGet runs from the packaged App Installer directory under C:\Program Files\WindowsApps\; confirm that your Sysmon or EDR configuration does not exclude processes from that path. Tested with WinGet v1.29.380 and Sysmon 15.22.
+known_false_positives: Developers and administrators legitimately use winget configure, Dev Home and Microsoft Intune or other management tooling to apply WinGet Configuration files. Preview subcommands (show, validate, list, test) also launch this process and are labelled configuration_action=preview. Baseline expected users, hosts and configuration file paths, and tune the filter macro accordingly.
+references:
+    - https://learn.microsoft.com/en-us/windows/package-manager/configuration/
+    - https://github.com/microsoft/winget-cli/blob/c608376/src/AppInstallerCLICore/ConfigurationSetProcessorFactoryRemoting.cpp
+    - https://blog.compass-security.com/2026/03/winget-desired-state-initial-access-established/
+    - https://ipurple.team/2026/06/09/winget/
+    - https://attack.mitre.org/techniques/T1218/
+drilldown_searches:
+    - name: View the detection results for - "$user$" and "$dest$"
+      search: '%original_detection_search% | search user = "$user$" dest = "$dest$"'
+      earliest_offset: $info_min_time$
+      latest_offset: $info_max_time$
+    - name: View risk events for the last 7 days for - "$user$" and "$dest$"
+      search: '| from datamodel Risk.All_Risk | search normalized_risk_object IN ("$user$", "$dest$") | stats count min(_time) as firstTime max(_time) as lastTime values(search_name) as "Search Name" values(risk_message) as "Risk Message" values(analyticstories) as "Analytic Stories" values(annotations._all) as "Annotations" values(annotations.mitre_attack.mitre_tactic) as "ATT&CK Tactics" by normalized_risk_object | `security_content_ctime(firstTime)` | `security_content_ctime(lastTime)`'
+      earliest_offset: 7d
+      latest_offset: "0"
+intermediate_findings:
+    entities:
+        - field: dest
+          type: system
+          score: 20
+          message: WinGet configuration processing ($configuration_action$) was started on $dest$ by user $user$ with command line $parent_process$
+        - field: user
+          type: user
+          score: 20
+          message: WinGet configuration processing ($configuration_action$) was started on $dest$ by user $user$ with command line $parent_process$
+threat_objects:
+    - field: parent_process_name
+      type: parent_process_name
+    - field: process_name
+      type: process_name
+analytic_story:
+    - Living Off The Land
+asset_type: Endpoint
+mitre_attack_id:
+    - T1218
+    - T1059.001
+product:
+    - Splunk Enterprise
+    - Splunk Enterprise Security
+    - Splunk Cloud
+category: endpoint
+security_domain: endpoint
+tests:
+    - name: Native WinGet configuration replay
+      test_type: experimental
+      expected_results: 6
+      description: 'Native Windows 11, WinGet v1.29.380, Sysmon 15.22, benign read-only assertion configuration (Microsoft.Windows.Developer/OsVersion). Eight winget runs: --version and list (no result), configure validate and configure show (preview), and configure -f, configure --file, a .txt-renamed file and a remote https file (apply). Expected six results: two preview and four apply. Curated attack_data publication is pending.'
